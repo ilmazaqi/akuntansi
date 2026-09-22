@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+
+  <!-- Konfigurasi PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e40af">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('SW Registered!', reg))
+        .catch(err => console.error('SW Failed!', err));
+    });
+  }
+</script>
+
+  
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detail Tagihan</title>
+    <style>
+        :root {
+            --primary: #1e40af;
+            --primary-hover: #1d4ed8;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #0f172a;
+            --border: #cbd5e1;
+            --green: #15803d;
+            --red: #b91c1c;
+        }
+
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
+        body { background-color: var(--bg); color: var(--text); padding: 20px; line-height: 1.5; }
+        .container { max-width: 1100px; margin: 0 auto; }
+
+        h1 { margin-bottom: 20px; text-align: center; color: var(--primary); font-size: 2rem; }
+
+        .card { background: var(--card); padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        
+        /* Grid Form */
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .form-group { display: flex; flex-direction: column; gap: 5px; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: #475569; }
+        input, select, button { padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem; outline: none; }
+        input:focus, select:focus { border-color: var(--primary); }
+        
+        .customer-input-group { display: flex; gap: 8px; }
+        .customer-input-group select { flex: 1; }
+        .btn-icon { background: #e2e8f0; color: #1e293b; border: 1px solid var(--border); font-weight: bold; cursor: pointer; padding: 0 12px; border-radius: 6px; transition: 0.2s; }
+        .btn-icon:hover { background: #cbd5e1; }
+
+        button.btn-add { background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; grid-column: 1 / -1; padding: 12px; }
+        button.btn-add:hover { background: var(--primary-hover); }
+        .btn-cancel-edit { background: #64748b; color: white; border: none; font-weight: bold; cursor: pointer; padding: 12px; display: none; margin-top: 5px; border-radius: 6px; }
+
+        /* Summary Dashboard */
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .summary-box { background: var(--card); padding: 16px; border-radius: 8px; border-left: 5px solid var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .summary-box.in { border-left-color: var(--green); }
+        .summary-box.out { border-left-color: var(--red); }
+        .summary-box.awal { border-left-color: #64748b; }
+        .summary-box h3 { font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .summary-box p { font-size: 1.25rem; font-weight: bold; margin-top: 5px; }
+
+        /* Filter Section */
+        .filter-section { display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; justify-content: space-between; margin-bottom: 15px; background: #f1f5f9; padding: 15px; border-radius: 8px; }
+        .filter-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .filter-item { display: flex; flex-direction: column; gap: 4px; }
+        .filter-item label { font-size: 0.8rem; font-weight: 600; color: #475569; }
+
+        .btn-print { background: #0f172a; color: white; border: none; font-weight: 600; padding: 9px 16px; border-radius: 6px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 6px; }
+        .btn-print:hover { background: #334155; }
+
+        /* Table */
+        .table-responsive { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; }
+        th, td { padding: 12px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+        th { background-color: #f1f5f9; font-weight: 600; color: #334155; }
+        .text-green { color: var(--green); font-weight: 600; }
+        .text-red { color: var(--red); font-weight: 600; }
+        .text-bold { font-weight: bold; }
+
+        .action-btns { display: flex; gap: 6px; }
+        .btn-edit { background: #f59e0b; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 600; }
+        .btn-delete { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 600; }
+
+        .loading { text-align: center; padding: 20px; font-style: italic; color: #64748b; }
+
+        /* Modal Tambah Customer */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background: white; padding: 25px; border-radius: 10px; width: 90%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+        .modal h3 { margin-bottom: 15px; color: var(--primary); }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .btn-cancel { background: #e2e8f0; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
+
+        /* Print Formatting Khusus Cetak/PDF */
+        @media print {
+            body { background: white; padding: 0; }
+            .container { max-width: 100%; }
+            
+            /* Sembunyikan elemen UI non-cetak */
+            #cardForm, .modal-overlay, .btn-print, .filter-section, button, h1, .action-col, .action-cell { 
+                display: none !important; 
+            }
+
+            /* Tampilkan Card, Ringkasan, dan Tabel */
+            .card { 
+                box-shadow: none !important; 
+                padding: 0 !important; 
+                margin-bottom: 15px !important; 
+                border: none !important;
+                background: transparent !important;
+            }
+            
+            .print-header { display: block !important; margin-bottom: 20px; text-align: center; }
+            .print-header h2 { font-size: 1.8rem; font-weight: bold; }
+            .print-header p { color: #475569; font-size: 0.95rem; }
+            
+            .summary-grid { 
+                display: grid !important; 
+                grid-template-columns: repeat(4, 1fr) !important; 
+                gap: 10px !important; 
+                margin-bottom: 20px !important; 
+            }
+            .summary-box { 
+                border: 1px solid #cbd5e1 !important; 
+                box-shadow: none !important; 
+                padding: 10px !important; 
+                border-radius: 6px !important;
+            }
+            .summary-box h3 { font-size: 0.75rem !important; color: #475569 !important; }
+            .summary-box p { font-size: 1.1rem !important; }
+            
+            .table-responsive { overflow: visible !important; }
+            table { border: 1px solid #000 !important; width: 100% !important; border-collapse: collapse !important; }
+            th, td { border: 1px solid #cbd5e1 !important; padding: 8px !important; font-size: 0.85rem !important; }
+            th { background-color: #f1f5f9 !important; color: black !important; }
+        }
+        .print-header { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header Khusus Printout -->
+    <div class="print-header">
+        <h2>DETAIL TAGIHAN</h2>
+        <p id="printSubtitle">Laporan Rekapitulasi Keuangan Customer</p>
+        <p id="printPeriod" style="font-size: 0.85rem; font-style: italic; margin-top: 4px;"></p>
+    </div>
+
+    <h1>Detail Tagihan</h1>
+
+    <!-- Form Input Transaksi -->
+    <div class="card" id="cardForm">
+        <h2 id="formTitle">Tambah Transaksi</h2>
+        <form id="txForm" style="margin-top: 15px;">
+            <input type="hidden" id="editRowIndex" value="">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Tanggal</label>
+                    <input type="date" id="tanggal" required>
+                </div>
+                <div class="form-group">
+                    <label>Customer</label>
+                    <div class="customer-input-group">
+                        <select id="customer" required>
+                            <!-- List Customer dinamik -->
+                        </select>
+                        <button type="button" class="btn-icon" onclick="openCustomerModal()" title="Tambah Customer Baru">+</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Keterangan</label>
+                    <input type="text" id="keterangan" list="keteranganList" placeholder="Ketik atau pilih..." required autocomplete="off">
+                    <datalist id="keteranganList"></datalist>
+                </div>
+                <div class="form-group">
+                    <label>Cash In (Masuk)</label>
+                    <input type="number" id="cashIn" placeholder="0" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Cash Out (Keluar)</label>
+                    <input type="number" id="cashOut" placeholder="0" min="0">
+                </div>
+                <button type="submit" class="btn-add" id="btnSubmit">Simpan Transaksi</button>
+                <button type="button" class="btn-cancel-edit" id="btnCancelEdit" onclick="cancelEdit()">Batal Edit</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Ringkasan Saldo (4 Kotak) -->
+    <div class="summary-grid">
+        <div class="summary-box awal">
+            <h3>Saldo Awal Periode</h3>
+            <p id="saldoAwal">Rp 0</p>
+        </div>
+        <div class="summary-box in">
+            <h3>Pemasukan Periode Ini</h3>
+            <p id="totalIn" class="text-green">Rp 0</p>
+        </div>
+        <div class="summary-box out">
+            <h3>Pengeluaran Periode Ini</h3>
+            <p id="totalOut" class="text-red">Rp 0</p>
+        </div>
+        <div class="summary-box">
+            <h3>Saldo Akhir Total</h3>
+            <p id="totalSaldo">Rp 0</p>
+        </div>
+    </div>
+
+    <!-- Filter & Tabel Transaksi -->
+    <div class="card">
+        <h2 style="margin-bottom: 15px;">Riwayat Transaksi</h2>
+        
+        <div class="filter-section">
+            <div class="filter-group">
+                <div class="filter-item">
+                    <label>Filter Customer:</label>
+                    <select id="filterCustomer" onchange="renderTable()">
+                        <option value="Semua">Semua Customer</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label>Dari Tanggal:</label>
+                    <input type="date" id="filterStartDate" onchange="renderTable()">
+                </div>
+                <div class="filter-item">
+                    <label>Sampai Tanggal:</label>
+                    <input type="date" id="filterEndDate" onchange="renderTable()">
+                </div>
+                <div class="filter-item" style="justify-content: flex-end;">
+                    <button type="button" class="btn-icon" onclick="resetFilter()" style="padding: 9px 12px;" title="Reset Filter">Reset</button>
+                </div>
+            </div>
+            
+            <button type="button" class="btn-print" onclick="window.print()">
+                🖨️ Print Rekap
+            </button>
+        </div>
+
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tanggal</th>
+                        <th>Customer</th>
+                        <th>Keterangan</th>
+                        <th>Pemasukan (Cash In)</th>
+                        <th>Pengeluaran (Cash Out)</th>
+                        <th>Saldo Akhir Akumulasi</th>
+                        <th class="action-col">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="7" class="loading">Memuat data dari Google Sheets...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Pop-up Tambah Customer Baru -->
+<div class="modal-overlay" id="customerModal">
+    <div class="modal">
+        <h3>Tambah Customer Baru</h3>
+        <div class="form-group">
+            <label>Nama Customer</label>
+            <input type="text" id="newCustomerName" placeholder="Contoh: Budi Santoso">
+        </div>
+        <div class="modal-actions">
+            <button type="button" class="btn-cancel" onclick="closeCustomerModal()">Batal</button>
+            <button type="button" class="btn-add" style="grid-column: auto; padding: 8px 16px;" onclick="addCustomer()">Tambah</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // URL Web App Google Apps Script Terbaru
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2w7cyoFgck5VLUjh8LnpSrDCU8UXMBTocowjwRg-l6akInpYdlv6v7uJvugjJ48G9/exec";
+
+    let rawData = [];
+    let customerList = ["Customer A", "Customer B"];
+
+    document.getElementById('tanggal').valueAsDate = new Date();
+
+    const savedCustomers = localStorage.getItem('buku_akuntansi_customers');
+    if (savedCustomers) {
+        customerList = JSON.parse(savedCustomers);
+    }
+
+    window.onload = () => {
+        populateCustomerSelects();
+        fetchData();
+    };
+
+    function saveCustomers() {
+        localStorage.setItem('buku_akuntansi_customers', JSON.stringify(customerList));
+    }
+
+    function populateCustomerSelects() {
+        const selectForm = document.getElementById('customer');
+        const selectFilter = document.getElementById('filterCustomer');
+        const currentFilter = selectFilter.value;
+
+        selectForm.innerHTML = customerList.map(c => `<option value="${c}">${c}</option>`).join('');
+        selectFilter.innerHTML = `<option value="Semua">Semua Customer</option>` + 
+            customerList.map(c => `<option value="${c}">${c}</option>`).join('');
+        
+        if (currentFilter && customerList.includes(currentFilter)) {
+            selectFilter.value = currentFilter;
+        }
+    }
+
+    function openCustomerModal() {
+        document.getElementById('customerModal').style.display = 'flex';
+        document.getElementById('newCustomerName').focus();
+    }
+
+    function closeCustomerModal() {
+        document.getElementById('customerModal').style.display = 'none';
+        document.getElementById('newCustomerName').value = '';
+    }
+
+    function addCustomer() {
+        const nameInput = document.getElementById('newCustomerName').value.trim();
+        if (nameInput) {
+            if (!customerList.includes(nameInput)) {
+                customerList.push(nameInput);
+                saveCustomers();
+                populateCustomerSelects();
+                document.getElementById('customer').value = nameInput;
+            }
+            closeCustomerModal();
+        } else {
+            alert('Nama customer tidak boleh kosong!');
+        }
+    }
+
+    async function fetchData() {
+        try {
+            const response = await fetch(SCRIPT_URL);
+            rawData = await response.json();
+
+            rawData.forEach(item => {
+                if (item.orang && !customerList.includes(item.orang)) {
+                    customerList.push(item.orang);
+                }
+            });
+            saveCustomers();
+            populateCustomerSelects();
+
+            updateDatalist();
+            renderTable();
+        } catch (error) {
+            console.error("Gagal mengambil data:", error);
+            document.getElementById('tableBody').innerHTML = `<tr><td colspan="7" class="loading" style="color:red">Gagal memuat data. Pastikan URL Web App benar dan akses diset ke 'Anyone'.</td></tr>`;
+        }
+    }
+
+    function updateDatalist() {
+        const uniqueKeterangan = [...new Set(rawData.map(item => item.keterangan))].filter(Boolean);
+        const datalist = document.getElementById('keteranganList');
+        datalist.innerHTML = uniqueKeterangan.map(ket => `<option value="${ket}">`).join('');
+    }
+
+    function formatRupiah(number) {
+        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(number);
+    }
+
+    function resetFilter() {
+        document.getElementById('filterCustomer').value = 'Semua';
+        document.getElementById('filterStartDate').value = '';
+        document.getElementById('filterEndDate').value = '';
+        renderTable();
+    }
+
+    function renderTable() {
+        const selectedCustomer = document.getElementById('filterCustomer').value;
+        const startDate = document.getElementById('filterStartDate').value;
+        const endDate = document.getElementById('filterEndDate').value;
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+
+        document.getElementById('printSubtitle').innerText = `Customer: ${selectedCustomer}`;
+        let periodText = "Semua Periode";
+        if (startDate && endDate) {
+            periodText = `Periode: ${startDate} s/d ${endDate}`;
+        } else if (startDate) {
+            periodText = `Periode: Dari ${startDate}`;
+        } else if (endDate) {
+            periodText = `Periode: Sampai ${endDate}`;
+        }
+        document.getElementById('printPeriod').innerText = periodText;
+
+        let sortedData = [...rawData].sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
+
+        let saldoPerCustomer = {};
+        let initialBalance = 0; 
+        let periodIn = 0;      
+        let periodOut = 0;     
+        let processedRows = [];
+
+        sortedData.forEach(row => {
+            const customer = row.orang; 
+            const inVal = parseFloat(row.cashIn) || 0;
+            const outVal = parseFloat(row.cashOut) || 0;
+
+            if (!saldoPerCustomer[customer]) {
+                saldoPerCustomer[customer] = 0;
+            }
+
+            const matchesCustomer = (selectedCustomer === 'Semua' || customer === selectedCustomer);
+            const rowDate = row.tanggal;
+
+            if (matchesCustomer && startDate && rowDate < startDate) {
+                initialBalance += (inVal - outVal);
+            }
+
+            saldoPerCustomer[customer] += (inVal - outVal);
+
+            let matchesDate = true;
+            if (startDate && rowDate < startDate) matchesDate = false;
+            if (endDate && rowDate > endDate) matchesDate = false;
+
+            if (matchesCustomer && matchesDate) {
+                periodIn += inVal;
+                periodOut += outVal;
+            }
+
+            processedRows.push({
+                ...row,
+                customer: customer,
+                saldoIndividu: saldoPerCustomer[customer],
+                isIncluded: matchesCustomer && matchesDate
+            });
+        });
+
+        const finalBalance = initialBalance + periodIn - periodOut;
+
+        document.getElementById('saldoAwal').innerText = formatRupiah(initialBalance);
+        document.getElementById('totalIn').innerText = formatRupiah(periodIn);
+        document.getElementById('totalOut').innerText = formatRupiah(periodOut);
+        document.getElementById('totalSaldo').innerText = formatRupiah(finalBalance);
+
+        let displayRows = processedRows.filter(r => r.isIncluded);
+
+        if (displayRows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="loading">Belum ada data transaksi pada periode ini.</td></tr>`;
+            return;
+        }
+
+        displayRows.reverse().forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${row.tanggal}</td>
+                <td><span style="background:#e2e8f0; padding:3px 8px; border-radius:4px; font-size:0.8rem; font-weight:600;">${row.customer}</span></td>
+                <td>${row.keterangan}</td>
+                <td class="text-green">${row.cashIn > 0 ? formatRupiah(row.cashIn) : '-'}</td>
+                <td class="text-red">${row.cashOut > 0 ? formatRupiah(row.cashOut) : '-'}</td>
+                <td class="text-bold">${formatRupiah(row.saldoIndividu)}</td>
+                <td class="action-cell">
+                    <div class="action-btns">
+                        <button class="btn-edit" onclick="editRow(${row.rowIndex}, '${row.tanggal}', '${row.customer}', '${row.keterangan.replace(/'/g, "\\'")}', ${row.cashIn}, ${row.cashOut})">Edit</button>
+                        <button class="btn-delete" onclick="deleteRow(${row.rowIndex})">Hapus</button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function editRow(rowIndex, tanggal, customer, keterangan, cashIn, cashOut) {
+        document.getElementById('editRowIndex').value = rowIndex;
+        document.getElementById('tanggal').value = tanggal;
+        document.getElementById('customer').value = customer;
+        document.getElementById('keterangan').value = keterangan;
+        document.getElementById('cashIn').value = cashIn || '';
+        document.getElementById('cashOut').value = cashOut || '';
+
+        document.getElementById('formTitle').innerText = "Edit Transaksi";
+        document.getElementById('btnSubmit').innerText = "Update Transaksi";
+        document.getElementById('btnCancelEdit').style.display = "block";
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+        document.getElementById('editRowIndex').value = '';
+        document.getElementById('txForm').reset();
+        document.getElementById('tanggal').valueAsDate = new Date();
+        document.getElementById('formTitle').innerText = "Tambah Transaksi";
+        document.getElementById('btnSubmit').innerText = "Simpan Transaksi";
+        document.getElementById('btnCancelEdit').style.display = "none";
+    }
+
+    async function deleteRow(rowIndex) {
+        if (!confirm("Apakah Anda yakin ingin menghapus transaksi ini?")) return;
+
+        try {
+            const payload = { action: "delete", rowIndex: rowIndex };
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            await fetchData();
+            alert("Transaksi berhasil dihapus!");
+        } catch (error) {
+            alert("Gagal menghapus transaksi: " + error);
+        }
+    }
+
+    document.getElementById('txForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const btnSubmit = document.getElementById('btnSubmit');
+        const editRowIndex = document.getElementById('editRowIndex').value;
+        const action = editRowIndex ? "update" : "create";
+
+        btnSubmit.disabled = true;
+        btnSubmit.innerText = editRowIndex ? "Updating..." : "Menyimpan...";
+
+        const payload = {
+            action: action,
+            rowIndex: editRowIndex ? parseInt(editRowIndex) : null,
+            tanggal: document.getElementById('tanggal').value,
+            orang: document.getElementById('customer').value,
+            keterangan: document.getElementById('keterangan').value,
+            cashIn: document.getElementById('cashIn').value || 0,
+            cashOut: document.getElementById('cashOut').value || 0
+        };
+
+        try {
+            await fetch(SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            cancelEdit();
+            await fetchData();
+            alert(action === "update" ? "Transaksi berhasil diperbarui!" : "Transaksi berhasil disimpan!");
+        } catch (error) {
+            alert("Gagal menyimpan transaksi: " + error);
+        } finally {
+            btnSubmit.disabled = false;
+        }
+    });
+</script>
+
+</body>
+</html>
